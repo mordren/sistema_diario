@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Nova análise{% endblock %}
+{% block content %}
+<h2 class="mb-4">Nova análise de reputação</h2>
+
+<form id="analiseForm" class="border p-4 bg-light rounded">
+    <div class="mb-3">
+        <label for="nome" class="form-label">Nome da pessoa</label>
+        <input type="text" class="form-control" id="nome" name="nome" required>
+    </div>
+    <div class="mb-3">
+        <label for="cargo" class="form-label">Cargo (opcional)</label>
+        <input type="text" class="form-control" id="cargo" name="cargo">
+    </div>
+    <button type="submit" class="btn btn-primary">Executar análise</button>
+</form>
+
+<div id="resultado" class="mt-4"></div>
+
+<script>
+document.getElementById("analiseForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const nome = document.getElementById("nome").value.trim();
+    const cargo = document.getElementById("cargo").value.trim();
+    document.getElementById("resultado").innerHTML = "<p><em>Executando análise...</em></p>";
+    const response = await fetch("/api/analises", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({nome, cargo})
+    });
+    const data = await response.json();
+    if (response.ok) {
+        document.getElementById("resultado").innerHTML = `
+            <div class="alert alert-success">Análise concluída!</div>
+            <pre class="bg-light p-3 border rounded">${JSON.stringify(data.analise, null, 2)}</pre>
+        `;
+    } else {
+        document.getElementById("resultado").innerHTML = `
+            <div class="alert alert-danger">Erro: ${data.error}</div>
+        `;
+    }
+});
+</script>
+{% endblock %}

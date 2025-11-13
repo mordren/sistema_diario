@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes da Pesquisa - {{ pesquisa.nome_pessoa }}{% endblock %}
+
+{% block content %}
+<h1>🔍 Detalhes da Pesquisa</h1>
+
+<div class="pesquisa-info">
+    <h2>{{ pesquisa.nome_pessoa }}</h2>
+    <p><strong>Status:</strong> {{ pesquisa.status }}</p>
+    <p><strong>Relevância:</strong> {{ pesquisa.pontuacao_relevancia }}%</p>
+    <p><strong>Data da Solicitação:</strong> {{ pesquisa.data_solicitacao }}</p>
+    {% if pesquisa.data_conclusao %}
+    <p><strong>Data de Conclusão:</strong> {{ pesquisa.data_conclusao }}</p>
+    {% endif %}
+</div>
+
+{% if pesquisa.tem_analise %}
+<div class="analise-section">
+    <h3>📊 Análise Detalhada</h3>
+
+    <div class="risco">
+        <h4>🚨 Nível de Risco: {{ pesquisa.analise_detalhada.risco_reputacao.upper() }}</h4>
+    </div>
+
+    <div class="estatisticas">
+        <p><strong>Total de Polêmicas:</strong> {{ pesquisa.analise_detalhada.total_polemicas }}</p>
+        <p><strong>Fontes Consultadas:</strong> {{ pesquisa.analise_detalhada.fontes_consultadas | join(', ') }}</p>
+    </div>
+
+    {% if pesquisa.analise_detalhada.polemicas %}
+    <div class="polemicas">
+        <h4>🎯 Polêmicas Identificadas</h4>
+        {% for polemica in pesquisa.analise_detalhada.polemicas %}
+        <div class="polemica gravidade-{{ polemica.gravidade }}">
+            <h5>{{ polemica.titulo }}</h5>
+            <p><strong>Gravidade:</strong> {{ polemica.gravidade }}</p>
+            <p><strong>Categorias:</strong> {{ polemica.categorias | join(', ') }}</p>
+            <p>{{ polemica.descricao }}</p>
+            <p><strong>Fonte:</strong> <a href="{{ polemica.fonte }}" target="_blank">{{ polemica.tipo_fonte }}</a></p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="sem-analise">
+    <p>Análise ainda não disponível ou em processamento.</p>
+</div>
+{% endif %}
+
+<div class="actions">
+    <a href="{{ url_for('listar_pesquisas') }}" class="btn">Voltar para Lista</a>
+    <a href="{{ url_for('gerar_relatorio', pesquisa_id=pesquisa.id) }}" class="btn" target="_blank">Gerar Relatório Completo</a>
+    <a href="{{ url_for('index') }}" class="btn">Nova Pesquisa</a>
+</div>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Análise de {{ analise.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {% if analise %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🔍 Análise de Reputação — {{ analise.nome }}</h2>
+        <span class="badge bg-secondary">ID #{{ analise.id }}</span>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-center border-danger mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">🚨 Risco de Reputação</h5>
+                    <h3 class="text-danger fw-bold">{{ analise.risco_reputacao|upper }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card text-center border-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">📅 Data da Análise</h5>
+                    <h3>{{ analise.data_analise[:10] if analise.data_analise else "-" }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card text-center border-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">🎯 Polêmicas Encontradas</h5>
+                    <h3 class="text-warning">{{ analise.total_polemicas }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>📋 Resumo da Análise</strong></div>
+        <div class="card-body">
+            <p>{{ analise.resumo_analise or "Nenhum resumo disponível." }}</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🔗 Fontes Consultadas</strong></div>
+        <div class="card-body">
+            {% if analise.fontes_consultadas %}
+                <ul>
+                    {% for f in analise.fontes_consultadas %}
+                        <li>{{ f }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Nenhuma fonte registrada.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🎯 Polêmicas Identificadas</strong></div>
+        <div class="card-body">
+            {% if analise.polemicas %}
+                {% for p in analise.polemicas %}
+                    <div class="mb-4 p-3 border rounded">
+                        <h5 class="text-danger">{{ p.titulo }}</h5>
+                        <p><strong>Descrição:</strong> {{ p.descricao }}</p>
+                        <p><strong>Fonte:</strong> {{ p.fonte }}</p>
+                        <p><strong>Impacto:</strong> {{ p.impacto or "—" }}</p>
+                        <p><strong>Data:</strong> {{ p.data_publicacao or "—" }}</p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>✅ Nenhuma polêmica significativa encontrada.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if analise.tweets_relevantes %}
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🐦 Tweets Relevantes</strong></div>
+        <div class="card-body">
+            {% for t in analise.tweets_relevantes %}
+                <div class="border rounded p-3 mb-3">
+                    <pre>{{ t }}</pre>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="text-end mt-4">
+        <a href="{{ url_for('listar_analises') }}" class="btn btn-secondary">⬅️ Voltar</a>
+    </div>
+
+    {% else %}
+    <div class="alert alert-danger">Análise não encontrada.</div>
+    {% endif %}
+</div>
+.risk-ALTO, .risk-alta, .risk-critica {
+    color: #c82333;
+    font-weight: bold;
+}
+
+.risk-medio, .risk-media {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.risk-baixo, .risk-baixa {
+    color: #198754;
+    font-weight: bold;
+}
+
+{% endblock %}
+
+
