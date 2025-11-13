@@ -185,7 +185,7 @@ if __name__ == "__main__":
     init_database()
     
     # Configuração Render
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     host = "0.0.0.0"
     
     print(f"🚀 Servidor iniciando no Render...")
