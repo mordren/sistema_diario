@@ -153,19 +153,29 @@ def criar_analise():
 
 # ========== INICIALIZAÇÃO DO BANCO ==========
 def init_database():
-    """Inicializa o banco de dados"""
+    """Inicializa o banco de dados e cria tabelas"""
     try:
         with app.app_context():
+            # Força a criação de todas as tabelas
             db.create_all()
             print("✅ Tabelas do banco verificadas/criadas")
             
-            # Verificar se consegue conectar
-            from models import Analise
-            count = Analise.query.count()
-            print(f"📊 Total de análises no banco: {count}")
+            # Verifica se as tabelas foram criadas
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            print(f"📊 Tabelas existentes: {tables}")
             
     except Exception as e:
-        print(f"❌ Erro ao inicializar banco: {e}")
+        print(f"❌ Erro crítico ao inicializar banco: {e}")
+        # Tenta criar tabelas de forma mais agressiva
+        try:
+            with app.app_context():
+                db.drop_all()
+                db.create_all()
+                print("✅ Tabelas recriadas forçadamente")
+        except Exception as e2:
+            print(f"❌ Falha total no banco: {e2}")
 """
 if __name__ == "__main__":
     # Garantir que as tabelas existam
