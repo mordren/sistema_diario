@@ -184,14 +184,13 @@ if __name__ == "__main__":
     # Inicializar banco
     init_database()
     
-    # Configuração Render
-    port = int(os.environ.get("PORT", 10000))
-    host = "0.0.0.0"
+    # CONFIGURAÇÃO OBRIGATÓRIA PARA RENDER
+    port = int(os.environ.get("PORT", 5000))
     
     print(f"🚀 Servidor iniciando no Render...")
-    print(f"📍 Host: {host}")
+    print(f"📍 Host: 0.0.0.0")
     print(f"🔌 Porta: {port}")
-    print(f"🌐 Acesse: http://{host}:{port}")
     print(f"🔗 Banco: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else 'SQLite'}")
     
-    app.run(host=host, port=port, debug=DEBUG)
+    # ESSENCIAL: host='0.0.0.0' para o Render
+    app.run(host='0.0.0.0', port=port, debug=False)
