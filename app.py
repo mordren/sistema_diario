@@ -1,50 +1,54 @@
+# app.py - ATUALIZAR A CONFIGURAÇÃO DO BANCO
 import os
 import json
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, redirect, url_for
-from flask_sqlalchemy import SQLAlchemy
+from dotenv import load_dotenv
+from flask import Flask, request, jsonify, render_template
 
-# ========== CONFIGURAÇÃO RENDER ==========
-# O Render automaticamente fornece DATABASE_URL para PostgreSQL
-DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///analises.db')
 
-# Se estiver usando PostgreSQL, pode precisar ajustar a URL
+load_dotenv()
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL não configurada! Configure a variável de ambiente DATABASE_URL.")
+
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-
-DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-db = SQLAlchemy(app)
+print(f"🔗 Conectando ao PostgreSQL: {DATABASE_URL}")
 
-print(f"🔗 Conectando ao banco: {DATABASE_URL[:50]}...")  # Log parcial da URL
 
 # ========== IMPORTAR MÓDULOS ==========
-print("🔄 Carregando módulos...")
+print("📄 Carregando módulos...")
 
-# Importar buscar.py
-try:
-    import buscar
-    BUSCAR_AVAILABLE = True
-    print("✅ buscar.py carregado com sucesso")
-except Exception as e:
-    print(f"❌ Erro ao carregar buscar.py: {e}")
-    BUSCAR_AVAILABLE = False
+# Importar db dos models primeiro
+from models import db
+# Inicializar db com a app
+db.init_app(app)
 
-# Importar e inicializar modelos
+MODELS_AVAILABLE = False
+BUSCAR_AVAILABLE = False
+
 try:
-    import models
-    models.init_models(db)
+    from models import AnalisePessoaDB, PolemicaDB, EmpresaAssociadaDB
     MODELS_AVAILABLE = True
-    print("✅ Models inicializados com sucesso")
+    print("✅ Models carregados com sucesso")
 except Exception as e:
     print(f"❌ Erro nos models: {e}")
-    MODELS_AVAILABLE = False
 
-# ========== ROTAS (mantenha suas rotas existentes) ==========
+try:
+    from buscar import executar_analise
+    BUSCAR_AVAILABLE = True
+    print("✅ buscar.py carregado com sucesso")
+except ImportError as e:
+    print(f"❌ Dependências faltando para buscar.py: {e}")
+except Exception as e:
+    print(f"❌ Erro ao carregar buscar.py: {e}")
+
+# ========== ROTAS ==========
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -53,154 +57,187 @@ def home():
 def listar_analises():
     if not MODELS_AVAILABLE:
         return render_template("listar_analises.html", analises=[])
-    
     try:
-        from models import Analise
-        analises = Analise.query.order_by(Analise.data_analise.desc()).all()
+        analises = AnalisePessoaDB.query.order_by(AnalisePessoaDB.data_analise.desc()).all()
         return render_template("listar_analises.html", analises=analises)
     except Exception as e:
-        print(f"Erro ao listar análises: {e}")
+        print(f"❌ Erro ao listar análises: {e}")
         return render_template("listar_analises.html", analises=[])
 
-@app.route("/analises/<ident>")
-def detalhar_analise(ident):
+@app.route("/analises/<int:analise_id>")
+def detalhar_analise(analise_id):
     if not MODELS_AVAILABLE:
-        return render_template("analise_detalhe.html", analise=None)
+        return render_template("detalhes.html", analise=None)
     
     try:
-        analise = models.get_analysis(ident)
-        if analise:
-            # Converter campos JSON para listas
-            if isinstance(analise.get("fontes_consultadas"), str):
-                analise["fontes_consultadas"] = json.loads(analise["fontes_consultadas"])
-            if isinstance(analise.get("tweets_relevantes"), str):
-                analise["tweets_relevantes"] = json.loads(analise["tweets_relevantes"])
-        return render_template("analise_detalhe.html", analise=analise)
+        analise = AnalisePessoaDB.query.get(analise_id)
+        if not analise:
+            return render_template("detalhes.html", analise=None)
+        
+        # Buscar polêmicas e empresas relacionadas
+        polemicas = PolemicaDB.query.filter_by(analise_pessoa_id=analise_id).all()
+        empresas = EmpresaAssociadaDB.query.filter_by(analise_pessoa_id=analise_id).all()
+        
+        # Processar fontes consultadas
+        fontes_consultadas = []
+        if analise.fontes_consultadas:
+            try:
+                fontes_consultadas = json.loads(analise.fontes_consultadas)
+            except:
+                fontes_consultadas = []
+        
+        # Processar tweets relevantes
+        tweets_relevantes = []
+        if analise.tweets_relevantes:
+            try:
+                tweets_relevantes = json.loads(analise.tweets_relevantes)
+            except:
+                tweets_relevantes = []
+        
+        # Montar dicionário da análise com todos os campos
+        analise_dict = {
+            'id': analise.id,
+            'nome': analise.nome,
+            'cargo': analise.cargo,
+            'data_analise': analise.data_analise,
+            'resumo_analise': analise.resumo_analise or '',
+            'risco_reputacao': analise.risco_reputacao or 'desconhecido',
+            'recomendacoes': analise.recomendacoes,
+            'total_polemicas': analise.total_polemicas if hasattr(analise, 'total_polemicas') else len(polemicas),
+            'fontes_consultadas': fontes_consultadas,
+            'tweets_relevantes': tweets_relevantes,
+            'polemicas': [],
+            'empresas_associadas': []
+        }
+        
+        # Processar polêmicas com todos os campos possíveis
+        for p in polemicas:
+            polemica_dict = {
+                'titulo': p.titulo or 'Sem título',
+                'descricao': p.descricao or 'Sem descrição',
+                'gravidade': p.gravidade or 'media',
+                'categoria': p.categoria,
+                'fonte_url': p.fonte_url,
+                'fonte': p.fonte_url if p.fonte_url else None,
+                'impacto_publico': getattr(p, 'impacto_publico', None),
+                'impacto': getattr(p, 'impacto', None),
+                'data_publicacao': getattr(p, 'data_publicacao', None),
+                'evidencias': []
+            }
+            
+            # Tentar extrair evidências se existirem
+            if hasattr(p, 'evidencias') and p.evidencias:
+                try:
+                    polemica_dict['evidencias'] = json.loads(p.evidencias) if isinstance(p.evidencias, str) else p.evidencias
+                except:
+                    polemica_dict['evidencias'] = []
+            
+            analise_dict['polemicas'].append(polemica_dict)
+        
+        # Processar empresas associadas
+        for e in empresas:
+            empresa_dict = {
+                'nome_empresa': e.nome_empresa,
+                'cnpj': e.cnpj,
+                'relacao': e.relacao,
+                'fonte_url': e.fonte_url
+            }
+            analise_dict['empresas_associadas'].append(empresa_dict)
+        
+        return render_template("detalhes.html", analise=analise_dict)
+        
     except Exception as e:
-        print(f"Erro ao detalhar análise: {e}")
-        return render_template("analise_detalhe.html", analise=None)
+        print(f"❌ Erro ao detalhar análise {analise_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template("detalhes.html", analise=None)
 
 @app.route("/api/analises", methods=["POST"])
 def criar_analise():
     data = request.get_json(force=True, silent=True)
+    
     if not data or "nome" not in data:
         return jsonify({"error": "Campo 'nome' é obrigatório"}), 400
-
+    
+    if not BUSCAR_AVAILABLE:
+        return jsonify({"error": "Sistema de busca indisponível"}), 500
+    
     nome = data.get("nome")
-    cargo = data.get("cargo")
-
+    cargo = data.get("cargo", "")
+    
     try:
-        # Usa buscar.py se disponível, senão usa fallback
-        if BUSCAR_AVAILABLE:
-            resultado = buscar.executar_analise(nome, cargo)
-            tipo_busca = "real"
-            print(f"✅ Busca REAL executada para: {nome}")
-        else:
-            from datetime import datetime
-            resultado = {
-                "nome": nome,
-                "cargo_publico": cargo,
-                "total_polemicas": 2,
-                "resumo_analise": f"Análise de demonstração para {nome}",
-                "risco_reputacao": "medio",
-                "polemicas": [
-                    {
-                        "titulo": "Sistema em Operação",
-                        "descricao": "Funcionalidade de busca em configuração",
-                        "impacto": "baixo",
-                        "fonte": "Sistema",
-                        "data_publicacao": datetime.now().strftime("%Y-%m-%d")
-                    }
-                ],
-                "fontes_consultadas": ["Sistema de análise"],
-                "tweets_relevantes": [],
-                "data_analise": datetime.now().isoformat()
-            }
-            tipo_busca = "demonstração"
-            print(f"✅ Busca DEMONSTRAÇÃO executada para: {nome}")
-            
+        resultado = executar_analise(nome, cargo)
+        print(f"✅ Busca executada para: {nome}")
     except Exception as e:
         print(f"❌ Erro na análise: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-    # Salvar no banco
+    
+    if not resultado:
+        return jsonify({"error": "Análise retornou vazio"}), 500
+    
+    analise_id = None
     if MODELS_AVAILABLE:
         try:
-            ident = models.save_analysis(resultado)
-            print(f"✅ Análise salva no banco com ID: {ident}")
-            return jsonify({
-                "status": "ok", 
-                "saved": True,
-                "id": ident,
-                "tipo_busca": tipo_busca,
-                "analise": resultado
-            }), 201
+            nova_analise = AnalisePessoaDB(
+                nome=resultado.get('nome', nome),
+                cargo=cargo,
+                data_analise=datetime.now(),
+                fontes_consultadas=json.dumps(resultado.get('fontes_consultadas', []), ensure_ascii=False),
+                resumo_analise=resultado.get('resumo_analise', ''),
+                risco_reputacao=resultado.get('risco_reputacao', 'desconhecido'),
+                recomendacoes=resultado.get('recomendacoes', ''),
+                tweets_relevantes=json.dumps(resultado.get('tweets_relevantes', []), ensure_ascii=False),
+                total_polemicas=len(resultado.get('polemicas', []))
+            )
+            db.session.add(nova_analise)
+            db.session.flush()
+            analise_id = nova_analise.id
+            
+            for polemica_data in resultado.get('polemicas', []):
+                polemica = PolemicaDB(
+                    analise_pessoa_id=analise_id,
+                    titulo=polemica_data.get('titulo', '')[:255],
+                    descricao=polemica_data.get('descricao', ''),
+                    gravidade=polemica_data.get('gravidade', 'media'),
+                    categoria=polemica_data.get('categoria', 'Outros'),
+                    fonte_url=polemica_data.get('fonte_url') or polemica_data.get('fonte', '')
+                )
+                db.session.add(polemica)
+            
+            for empresa_data in resultado.get('empresas_associadas', []):
+                empresa = EmpresaAssociadaDB(
+                    analise_pessoa_id=analise_id,
+                    nome_empresa=empresa_data.get('nome_empresa', ''),
+                    cnpj=empresa_data.get('cnpj', ''),
+                    relacao=empresa_data.get('relacao', ''),
+                    fonte_url=empresa_data.get('fonte_url', '')
+                )
+                db.session.add(empresa)
+            
+            db.session.commit()
+            print(f"✅ Análise salva com ID: {analise_id}")
+            return jsonify({"status": "ok", "id": analise_id, "analise": resultado}), 201
         except Exception as e:
-            print(f"❌ Erro ao salvar no banco: {e}")
-            return jsonify({
-                "status": "ok",
-                "saved": False,
-                "reason": f"Erro no banco: {e}",
-                "analise": resultado
-            }), 201
-    else:
-        return jsonify({
-            "status": "ok",
-            "saved": False,
-            "reason": "Models não disponível",
-            "analise": resultado
-        }), 201
+            db.session.rollback()
+            print(f"❌ Erro ao salvar: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"status": "ok", "id": None, "error": str(e), "analise": resultado}), 201
+    
+    return jsonify({"status": "ok", "id": None, "analise": resultado}), 201
 
-# ========== INICIALIZAÇÃO DO BANCO ==========
+# ========== INICIALIZAÇÃO ==========
 def init_database():
-    """Inicializa o banco de dados e cria tabelas"""
-    try:
-        with app.app_context():
-            # Força a criação de todas as tabelas
+    with app.app_context():
+        try:
             db.create_all()
             print("✅ Tabelas do banco verificadas/criadas")
-            
-            # Verifica se as tabelas foram criadas
-            from sqlalchemy import inspect
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            print(f"📊 Tabelas existentes: {tables}")
-            
-    except Exception as e:
-        print(f"❌ Erro crítico ao inicializar banco: {e}")
-        # Tenta criar tabelas de forma mais agressiva
-        try:
-            with app.app_context():
-                db.drop_all()
-                db.create_all()
-                print("✅ Tabelas recriadas forçadamente")
-        except Exception as e2:
-            print(f"❌ Falha total no banco: {e2}")
-"""
-if __name__ == "__main__":
-    # Garantir que as tabelas existam
-    try:
-        with app.app_context():
-            db.create_all()
-    except Exception as e:
-        print(f"Aviso: {e}")
-    
-    print(f"🚀 Servidor iniciando...")
-    app.run(host=HOST, port=PORT, debug=DEBUG)
-"""
+        except Exception as e:
+            print(f"❌ Erro ao inicializar banco: {e}")
 
-# ========== CONFIGURAÇÃO RENDER ==========
 if __name__ == "__main__":
-    # Inicializar banco
     init_database()
-    
-    # CONFIGURAÇÃO OBRIGATÓRIA PARA RENDER
     port = int(os.environ.get("PORT", 5000))
-    
-    print(f"🚀 Servidor iniciando no Render...")
-    print(f"📍 Host: 0.0.0.0")
-    print(f"🔌 Porta: {port}")
-    print(f"🔗 Banco: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else 'SQLite'}")
-    
-    # ESSENCIAL: host='0.0.0.0' para o Render
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -1,57 +1,260 @@
 {% extends "base.html" %}
-
-{% block title %}Detalhes da Pesquisa - {{ pesquisa.nome_pessoa }}{% endblock %}
+{% block title %}Análise de {{ analise.nome if analise else 'Não encontrada' }}{% endblock %}
 
 {% block content %}
-<h1>🔍 Detalhes da Pesquisa</h1>
-
-<div class="pesquisa-info">
-    <h2>{{ pesquisa.nome_pessoa }}</h2>
-    <p><strong>Status:</strong> {{ pesquisa.status }}</p>
-    <p><strong>Relevância:</strong> {{ pesquisa.pontuacao_relevancia }}%</p>
-    <p><strong>Data da Solicitação:</strong> {{ pesquisa.data_solicitacao }}</p>
-    {% if pesquisa.data_conclusao %}
-    <p><strong>Data de Conclusão:</strong> {{ pesquisa.data_conclusao }}</p>
-    {% endif %}
-</div>
-
-{% if pesquisa.tem_analise %}
-<div class="analise-section">
-    <h3>📊 Análise Detalhada</h3>
-
-    <div class="risco">
-        <h4>🚨 Nível de Risco: {{ pesquisa.analise_detalhada.risco_reputacao.upper() }}</h4>
+<div class="container mt-4">
+    {% if analise %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🔍 Análise de Reputação — {{ analise.nome }}</h2>
+        <span class="badge bg-secondary">ID #{{ analise.id }}</span>
     </div>
 
-    <div class="estatisticas">
-        <p><strong>Total de Polêmicas:</strong> {{ pesquisa.analise_detalhada.total_polemicas }}</p>
-        <p><strong>Fontes Consultadas:</strong> {{ pesquisa.analise_detalhada.fontes_consultadas | join(', ') }}</p>
-    </div>
-
-    {% if pesquisa.analise_detalhada.polemicas %}
-    <div class="polemicas">
-        <h4>🎯 Polêmicas Identificadas</h4>
-        {% for polemica in pesquisa.analise_detalhada.polemicas %}
-        <div class="polemica gravidade-{{ polemica.gravidade }}">
-            <h5>{{ polemica.titulo }}</h5>
-            <p><strong>Gravidade:</strong> {{ polemica.gravidade }}</p>
-            <p><strong>Categorias:</strong> {{ polemica.categorias | join(', ') }}</p>
-            <p>{{ polemica.descricao }}</p>
-            <p><strong>Fonte:</strong> <a href="{{ polemica.fonte }}" target="_blank">{{ polemica.tipo_fonte }}</a></p>
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-center mb-3 
+                {% if analise.risco_reputacao|lower in ['critica', 'alta', 'alto'] %}border-danger
+                {% elif analise.risco_reputacao|lower in ['media', 'média', 'medio'] %}border-warning
+                {% else %}border-success{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">🚨 Nível de Risco</h5>
+                    <h3 class="
+                        {% if analise.risco_reputacao|lower in ['critica', 'alta', 'alto'] %}text-danger
+                        {% elif analise.risco_reputacao|lower in ['media', 'média', 'medio'] %}text-warning
+                        {% else %}text-success{% endif %} fw-bold">
+                        {% if analise.risco_reputacao|lower in ['baixa', 'baixo'] %}
+                            BAIXO ✅
+                        {% elif analise.risco_reputacao|lower in ['media', 'média', 'medio'] %}
+                            MÉDIO ⚠️
+                        {% elif analise.risco_reputacao|lower in ['alta', 'alto'] %}
+                            ALTO 🚨
+                        {% elif analise.risco_reputacao|lower in ['critica', 'crítica'] %}
+                            CRÍTICO 💀
+                        {% else %}
+                            {{ analise.risco_reputacao|upper if analise.risco_reputacao else "N/A" }}
+                        {% endif %}
+                    </h3>
+                    <small class="text-muted">
+                        {% if analise.risco_reputacao|lower in ['baixa', 'baixo'] %}
+                            Reputação predominantemente positiva
+                        {% elif analise.risco_reputacao|lower in ['media', 'média', 'medio'] %}
+                            Algumas questões a observar
+                        {% elif analise.risco_reputacao|lower in ['alta', 'alto'] %}
+                            Atenção necessária
+                        {% else %}
+                            Avaliação de risco reputacional
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
         </div>
-        {% endfor %}
+
+        <div class="col-md-4">
+            <div class="card text-center border-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">📅 Data da Análise</h5>
+                    <h3>
+                        {% if analise.data_analise %}
+                            {% if analise.data_analise is string %}
+                                {{ analise.data_analise[:10] }}
+                            {% else %}
+                                {{ analise.data_analise.strftime('%Y-%m-%d') }}
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card text-center border-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">🎯 Polêmicas Encontradas</h5>
+                    <h3 class="text-warning">
+                        {{ analise.total_polemicas if analise.total_polemicas is defined else (analise.polemicas|length if analise.polemicas else 0) }}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if analise.cargo %}
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>💼 Cargo/Função</strong></div>
+        <div class="card-body">
+            <p>{{ analise.cargo }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>📋 Resumo da Análise</strong></div>
+        <div class="card-body">
+            <p>{{ analise.resumo_analise if analise.resumo_analise else "Nenhum resumo disponível." }}</p>
+        </div>
+    </div>
+
+    {% if analise.recomendacoes %}
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>💡 Recomendações</strong></div>
+        <div class="card-body">
+            <p>{{ analise.recomendacoes }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🔗 Fontes Consultadas</strong></div>
+        <div class="card-body">
+            {% if analise.fontes_consultadas and analise.fontes_consultadas|length > 0 %}
+                <ul class="mb-0">
+                    {% for f in analise.fontes_consultadas %}
+                        <li>{{ f }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="mb-0 text-muted">Nenhuma fonte registrada.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🎯 Polêmicas Identificadas</strong></div>
+        <div class="card-body">
+            {% if analise.polemicas and analise.polemicas|length > 0 %}
+                {% for p in analise.polemicas %}
+                    <div class="mb-4 p-3 border rounded 
+                        {% if p.gravidade|lower in ['critica', 'alta'] %}border-danger bg-danger bg-opacity-10
+                        {% elif p.gravidade|lower == 'media' %}border-warning bg-warning bg-opacity-10
+                        {% else %}border-info bg-info bg-opacity-10{% endif %}">
+                        
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="
+                                {% if p.gravidade|lower in ['critica', 'alta'] %}text-danger
+                                {% elif p.gravidade|lower == 'media' %}text-warning
+                                {% else %}text-info{% endif %}">
+                                {{ p.titulo if p.titulo else "Sem título" }}
+                            </h5>
+                            <span class="badge 
+                                {% if p.gravidade|lower in ['critica', 'alta'] %}bg-danger
+                                {% elif p.gravidade|lower == 'media' %}bg-warning
+                                {% else %}bg-info{% endif %}">
+                                {{ p.gravidade|upper if p.gravidade else "N/A" }}
+                            </span>
+                        </div>
+                        
+                        <p><strong>📝 Descrição:</strong> {{ p.descricao if p.descricao else "Sem descrição disponível" }}</p>
+                        
+                        {% if p.categoria %}
+                        <p><strong>📂 Categoria:</strong> 
+                            <span class="badge bg-secondary">{{ p.categoria }}</span>
+                        </p>
+                        {% endif %}
+                        
+                        {% if p.fonte_url or p.fonte %}
+                        <p><strong>🔗 Fonte:</strong> 
+                            {% if p.fonte_url %}
+                                <a href="{{ p.fonte_url }}" target="_blank" rel="noopener noreferrer">
+                                    {{ p.fonte_url[:80] }}{% if p.fonte_url|length > 80 %}...{% endif %}
+                                </a>
+                            {% elif p.fonte %}
+                                {{ p.fonte }}
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                        
+                        {% if p.impacto_publico or p.impacto %}
+                        <p><strong>📊 Impacto:</strong> {{ p.impacto_publico if p.impacto_publico else p.impacto }}</p>
+                        {% endif %}
+                        
+                        {% if p.data_publicacao %}
+                        <p><strong>📅 Data:</strong> {{ p.data_publicacao }}</p>
+                        {% endif %}
+                        
+                        {% if p.evidencias %}
+                        <details class="mt-2">
+                            <summary class="text-muted" style="cursor: pointer;">🔍 Ver evidências</summary>
+                            <div class="mt-2 p-2 bg-light rounded">
+                                {% for evidencia in p.evidencias %}
+                                    <p class="small mb-1">• {{ evidencia }}</p>
+                                {% endfor %}
+                            </div>
+                        </details>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-success mb-0">
+                    ✅ Nenhuma polêmica significativa encontrada.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if analise.empresas_associadas and analise.empresas_associadas|length > 0 %}
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🏢 Empresas Associadas</strong></div>
+        <div class="card-body">
+            {% for e in analise.empresas_associadas %}
+                <div class="border rounded p-3 mb-3">
+                    <h6 class="fw-bold">{{ e.nome_empresa }}</h6>
+                    {% if e.cnpj %}<p><strong>CNPJ:</strong> {{ e.cnpj }}</p>{% endif %}
+                    {% if e.relacao %}<p><strong>Relação:</strong> {{ e.relacao }}</p>{% endif %}
+                    {% if e.fonte_url %}
+                    <p><strong>Fonte:</strong> 
+                        <a href="{{ e.fonte_url }}" target="_blank" rel="noopener noreferrer">
+                            {{ e.fonte_url[:60] }}{% if e.fonte_url|length > 60 %}...{% endif %}
+                        </a>
+                    </p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if analise.tweets_relevantes and analise.tweets_relevantes|length > 0 %}
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>🐦 Tweets Relevantes</strong></div>
+        <div class="card-body">
+            {% for t in analise.tweets_relevantes %}
+                <div class="border rounded p-3 mb-3 bg-light">
+                    {% if t is string %}
+                        {% set tweet_data = t|safe %}
+                        <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word;">{{ tweet_data }}</pre>
+                    {% else %}
+                        <p class="mb-1"><strong>{{ t.texto if t.texto else 'Tweet' }}</strong></p>
+                        {% if t.descricao %}<p class="small text-muted mb-1">{{ t.descricao }}</p>{% endif %}
+                        {% if t.url %}
+                        <a href="{{ t.url }}" target="_blank" rel="noopener noreferrer" class="small">
+                            Ver tweet original →
+                        </a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="text-end mt-4">
+        <a href="{{ url_for('listar_analises') }}" class="btn btn-secondary">⬅️ Voltar para Lista</a>
+        <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir</button>
+    </div>
+
+    {% else %}
+    <div class="alert alert-danger">
+        <h4>❌ Análise não encontrada</h4>
+        <p>A análise solicitada não existe ou foi removida.</p>
+        <a href="{{ url_for('listar_analises') }}" class="btn btn-secondary">⬅️ Voltar para Lista</a>
     </div>
     {% endif %}
 </div>
-{% else %}
-<div class="sem-analise">
-    <p>Análise ainda não disponível ou em processamento.</p>
-</div>
-{% endif %}
 
-<div class="actions">
-    <a href="{{ url_for('listar_pesquisas') }}" class="btn">Voltar para Lista</a>
-    <a href="{{ url_for('gerar_relatorio', pesquisa_id=pesquisa.id) }}" class="btn" target="_blank">Gerar Relatório Completo</a>
-    <a href="{{ url_for('index') }}" class="btn">Nova Pesquisa</a>
-</div>
+<style>
+@media print {
+    .btn, nav, .card-header { display: none; }
+}
+</style>
 {% endblock %}

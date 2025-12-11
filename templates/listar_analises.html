@@ -1,78 +1,117 @@
 {% extends "base.html" %}
-{% block title %}Análises salvas{% endblock %}
+{% block title %}Lista de Análises{% endblock %}
+
 {% block content %}
-<div class="container mt-4 fade-in">
+<div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-dark">📊 Análises Salvas</h2>
-        <span class="badge bg-primary fs-6">{{ analises|length }} análise(s)</span>
+        <h2>📋 Análises de Reputação Realizadas</h2>
+        <a href="{{ url_for('home') }}" class="btn btn-primary">➕ Nova Análise</a>
     </div>
 
-    {% if analises %}
-    <div class="analises-table">
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th width="80">ID</th>
-                    <th>Nome</th>
-                    <th width="180">Data</th>
-                    <th width="120">Risco</th>
-                    <th width="120" class="text-center">Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for a in analises %}
-                <tr>
-                    <td>
-                        <strong class="text-primary">#{{ a.id }}</strong>
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <span class="status-indicator status-completed"></span>
-                            <div>
-                                <div class="fw-bold">{{ a.nome }}</div>
-                                {% if a.cargo_publico %}
-                                <small class="text-muted">{{ a.cargo_publico }}</small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        <small class="text-muted">
-                            {{ a.data_analise.strftime("%d/%m/%Y") if a.data_analise else "-" }}<br>
-                            <span class="text-muted">{{ a.data_analise.strftime("%H:%M") if a.data_analise else "" }}</span>
-                        </small>
-                    </td>
-                    <td>
-                        {% if a.risco_reputacao %}
-                            {% set risco = a.risco_reputacao.lower() %}
-                            <span class="risk-badge risk-{{ risco }}">
-                                {{ a.risco_reputacao.upper() }}
-                            </span>
+    {% if analises and analises|length > 0 %}
+    <div class="row">
+        {% for analise in analises %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header 
+                    {% if analise.risco_reputacao|lower in ['critica', 'alta', 'alto'] %}bg-danger text-white
+                    {% elif analise.risco_reputacao|lower in ['media', 'medio'] %}bg-warning
+                    {% else %}bg-success text-white{% endif %}">
+                    <h5 class="mb-0">
+                        <i class="bi bi-person-circle"></i> {{ analise.nome }}
+                    </h5>
+                </div>
+                
+                <div class="card-body">
+                    {% if analise.cargo %}
+                    <p class="card-text">
+                        <strong>💼 Cargo:</strong> {{ analise.cargo }}
+                    </p>
+                    {% endif %}
+                    
+                    <p class="card-text">
+                        <strong>📅 Data:</strong> 
+                        {% if analise.data_analise %}
+                            {% if analise.data_analise is string %}
+                                {{ analise.data_analise[:10] }}
+                            {% else %}
+                                {{ analise.data_analise.strftime('%d/%m/%Y') }}
+                            {% endif %}
                         {% else %}
-                            <span class="text-muted">-</span>
+                            N/A
                         {% endif %}
-                    </td>
-                    <td class="text-center">
-                        <a href="{{ url_for('detalhar_analise', ident=a.id) }}" 
-                           class="btn btn-sm btn-outline-primary" 
-                           title="Ver análise completa">
-                            👁️ Detalhes
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </p>
+                    
+                    <p class="card-text">
+                        <strong>🚨 Risco:</strong>
+                        <span class="badge 
+                            {% if analise.risco_reputacao|lower in ['critica', 'alta', 'alto'] %}bg-danger
+                            {% elif analise.risco_reputacao|lower in ['media', 'medio'] %}bg-warning text-dark
+                            {% else %}bg-success{% endif %}">
+                            {{ analise.risco_reputacao|upper if analise.risco_reputacao else "N/A" }}
+                        </span>
+                    </p>
+                    
+                    <p class="card-text">
+                        <strong>🎯 Polêmicas:</strong> 
+                        <span class="badge bg-secondary">
+                            {{ analise.total_polemicas if analise.total_polemicas is defined else 0 }}
+                        </span>
+                    </p>
+                    
+                    {% if analise.resumo_analise %}
+                    <p class="card-text text-muted small">
+                        {{ analise.resumo_analise[:100] }}{% if analise.resumo_analise|length > 100 %}...{% endif %}
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div class="card-footer bg-transparent">
+                    <a href="{{ url_for('detalhar_analise', analise_id=analise.id) }}" 
+                       class="btn btn-sm btn-primary w-100">
+                        🔍 Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
+    
+    <div class="alert alert-info mt-4">
+        <strong>ℹ️ Total de análises:</strong> {{ analises|length }}
+    </div>
+    
     {% else %}
-    <div class="empty-state">
-        <div class="mb-3">📭</div>
-        <h4 class="text-muted">Nenhuma análise encontrada</h4>
-        <p class="text-muted mb-4">Execute sua primeira análise para ver os resultados aqui.</p>
-        <a href="{{ url_for('home') }}" class="btn btn-primary">
-            🚀 Fazer primeira análise
+    <div class="alert alert-warning text-center py-5">
+        <h4>📭 Nenhuma análise encontrada</h4>
+        <p>Ainda não há análises realizadas. Clique no botão acima para criar a primeira análise.</p>
+        <a href="{{ url_for('home') }}" class="btn btn-primary mt-3">
+            ➕ Criar Primeira Análise
         </a>
     </div>
     {% endif %}
 </div>
+
+<style>
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+.card-header h5 {
+    font-size: 1.1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.badge {
+    font-size: 0.85rem;
+    padding: 0.4em 0.6em;
+}
+</style>
 {% endblock %}

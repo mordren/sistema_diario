@@ -7,45 +7,14 @@ from pydantic import BaseModel, Field
 from ddgs import DDGS
 import pandas as pd
 import time
+from buscador_duck import buscar_dados_duckduckgo_completo
+from models import AnalisePessoa, GravidadeEnum, Polemica, TipoFonteEnum
+from script_grok import analisar_com_grok
+from schemas import AnalisePessoaSchema, PolemicaSchema
+
 
 # Configuração da API do Grok
 XAI_API_KEY = os.environ.get("XAI_API_KEY")
-
-class GravidadeEnum(str, Enum):
-    BAIXA = "baixa"
-    MEDIA = "media"
-    ALTA = "alta"
-    CRITICA = "critica"
-
-class TipoFonteEnum(str, Enum):
-    TWITTER = "twitter"
-    NOTICIA = "noticia"
-    FORUM = "forum"
-    BLOG = "blog"
-    SITE_OFICIAL = "site_oficial"
-
-class Polemica(BaseModel):
-    titulo: str = Field(description="Título resumido da polêmica")
-    descricao: str = Field(description="Descrição detalhada da polêmica")
-    fonte: str = Field(description="URL ou origem da informação")
-    tipo_fonte: TipoFonteEnum = Field(description="Tipo da fonte da informação")
-    data_incidente: Optional[str] = Field(description="Data do incidente se disponível")
-    gravidade: GravidadeEnum = Field(description="Nível de gravidade da polêmica")
-    categorias: List[str] = Field(description="Categorias da polêmica")
-    evidencias: List[str] = Field(description="Evidências ou provas mencionadas")
-    impacto_publico: str = Field(description="Potencial impacto na opinião pública")
-    relevancia: str = Field(description="Relevância da informação encontrada")
-
-class AnalisePessoa(BaseModel):
-    nome: str = Field(description="Nome completo da pessoa analisada")
-    cargo_publico: Optional[str] = Field(description="Cargo público se aplicável")
-    total_polemicas: int = Field(description="Número total de polêmicas encontradas")
-    polemicas: List[Polemica] = Field(description="Lista de polêmicas identificadas")
-    resumo_analise: str = Field(description="Resumo geral da análise")
-    risco_reputacao: GravidadeEnum = Field(description="Risco geral para reputação")
-    data_analise: str = Field(description="Data da análise")
-    fontes_consultadas: List[str] = Field(description="Fontes utilizadas na pesquisa")
-    tweets_relevantes: List[str] = Field(description="Tweets relevantes encontrados")
 
 class BuscadorTwitterUnificado:
     def __init__(self):
@@ -57,109 +26,6 @@ class BuscadorTwitterUnificado:
         except ImportError:
             print("⚠️ SDK do Grok não disponível")
             self.grok_available = False
-    
-    def buscar_dados_duckduckgo_completo(self, nome_pessoa):
-        """Busca abrangente no DuckDuckGo com múltiplas queries"""
-        print(f"🔍 Buscando dados para: {nome_pessoa}")
-        
-        queries = [
-            f'"{nome_pessoa}" twitter polêmica',
-            f'"{nome_pessoa}" escândalo',
-            f'"{nome_pessoa}" processo judicial',
-            f'"{nome_pessoa}" licitação irregular',
-            f'"{nome_pessoa}" MPF investigação',
-            f'"{nome_pessoa}" condenado',
-            f'"{nome_pessoa}" fraude',
-            f'"{nome_pessoa}" corrupção',
-            f'"{nome_pessoa}" improbidade',
-            f'"{nome_pessoa}" desvio de verba'
-        ]
-        
-        todos_resultados = []
-        
-        for i, query in enumerate(queries, 1):
-            print(f"  📝 Query {i}/10: {query}")
-            try:
-                results = list(self.ddgs.text(
-                    query=query,
-                    region='br-pt',
-                    max_results=8
-                ))
-                todos_resultados.extend(results)
-                print(f"    ✅ Encontrados: {len(results)} resultados")
-                time.sleep(1.5)  # Rate limiting
-            except Exception as e:
-                print(f"    ❌ Erro na query '{query}': {e}")
-                continue
-        
-        # Remover duplicatas
-        resultados_unicos = []
-        urls_vistas = set()
-        
-        for resultado in todos_resultados:
-            url = resultado.get('href', '')
-            if url and url not in urls_vistas:
-                urls_vistas.add(url)
-                resultados_unicos.append(resultado)
-        
-        print(f"🎯 Total de resultados únicos: {len(resultados_unicos)}")
-        return resultados_unicos
-    
-    def analisar_com_grok(self, nome_pessoa, resultados_ddgs):
-        """Usa o Grok para analisar os resultados do DuckDuckGo"""
-        if not self.grok_available:
-            return {"error": "Grok não disponível"}
-        
-        try:
-            from xai_sdk.chat import system, user
-            
-            # Preparar contexto consolidado
-            contexto_ddgs = "RESULTADOS CONSOLIDADOS DO DUCKDUCKGO:\n\n"
-            for i, resultado in enumerate(resultados_ddgs, 1):
-                contexto_ddgs += f"--- RESULTADO {i} ---\n"
-                contexto_ddgs += f"Título: {resultado.get('title', 'N/A')}\n"
-                contexto_ddgs += f"URL: {resultado.get('href', 'N/A')}\n"
-                contexto_ddgs += f"Descrição: {resultado.get('body', 'N/A')}\n"
-                contexto_ddgs += f"Fonte: {self._classificar_fonte_simples(resultado.get('href', ''))}\n\n"
-            
-            chat = self.client.chat.create(model="grok-2-1212")
-            
-            prompt = f"""
-            ANALISE DE REPUTAÇÃO PÚBLICA - {nome_pessoa.upper()}
-
-            BASEADO NOS SEGUINTES RESULTADOS CONSOLIDADOS DE BUSCA:
-            {contexto_ddgs}
-
-            ANALISE ESTES RESULTADOS E IDENTIFIQUE:
-
-            🔍 POLÊMICAS E CONTROVÉRSIAS:
-            - Listar cada polêmica encontrada com título descritivo
-            - Incluir URL da fonte
-            - Classificar gravidade (baixa, media, alta, critica)
-            - Categorizar (Licitações, Judicial, Eleitoral, etc)
-
-            📊 ANÁLISE DE RISCO:
-            - Risco geral para reputação
-            - Padrões de comportamento problemático
-            - Impacto potencial na opinião pública
-
-            🎯 DIRETRIZES:
-            - Seja objetivo e factual
-            - Baseie-se apenas nas informações fornecidas
-            - Priorize fontes confiáveis (sites oficiais, notícias)
-            - Inclua tweets apenas quando relevantes como evidência
-            """
-            
-            chat.append(system("Você é um analista especializado em due diligence e análise de reputação pública com expertise jurídica e política."))
-            chat.append(user(prompt))
-            
-            response, analise = chat.parse(AnalisePessoa)
-            
-            return analise.dict()
-            
-        except Exception as e:
-            print(f"❌ Erro na análise Grok: {e}")
-            return {"error": str(e)}
     
     def _classificar_fonte_simples(self, url):
         """Classificação simples da fonte para contexto"""
@@ -177,46 +43,67 @@ class AnalisadorUnificado:
     def __init__(self):
         self.buscador = BuscadorTwitterUnificado()
     
-    def analisar_pessoa(self, nome_pessoa, cargo_publico=None):
-        """Fluxo unificado: DuckDuckGo -> Grok -> Análise"""
+
+    def validar_dados_analise(data):
+        """Valida dados de entrada para análise"""
+        if not data.get('nome') or len(data['nome'].strip()) < 2:
+            return False, "Nome inválido"
+        if len(data.get('nome', '')) > 200:
+            return False, "Nome muito longo"
+        return True, ""
+
+    def analisar_pessoa(self, nome_pessoa, cargo_publico=None, estado="Paraná"):
+        """Fluxo unificado com buscas melhoradas"""
         print(f"\n🎯 INICIANDO ANÁLISE: {nome_pessoa}")
+        if cargo_publico:
+            print(f"🏛️  Contexto: {cargo_publico}")
         print("=" * 60)
         
-        # Fase 1: Busca consolidada no DuckDuckGo
-        print("\n🔍 FASE 1: BUSCA CONSOLIDADA DUCKDUCKGO...")
-        resultados_ddgs = self.buscador.buscar_dados_duckduckgo_completo(nome_pessoa)
+        print("\n🔍 FASE 1: BUSCA INTELIGENTE DUCKDUCKGO...")
+        resultados_ddgs = buscar_dados_duckduckgo_completo(nome_pessoa, cargo_publico, estado)
         
         if not resultados_ddgs:
-            print("❌ Nenhum resultado encontrado no DuckDuckGo")
+            print("❌ Nenhum resultado relevante encontrado")
             return self._criar_analise_vazia(nome_pessoa, cargo_publico)
         
-        # Salvar resultados brutos
+        print(f"✅ Encontrados {len(resultados_ddgs)} resultados relevantes")
         self._salvar_resultados_brutos(resultados_ddgs, nome_pessoa)
-        
-        # Fase 2: Análise com Grok
+
         print("\n🤖 FASE 2: ANÁLISE COM GROK...")
-        analise_grok = self.buscador.analisar_com_grok(nome_pessoa, resultados_ddgs)
+        analise_grok = analisar_com_grok(nome_pessoa, resultados_ddgs)
         
         # Fase 3: Consolidação final
         print("\n📊 FASE 3: CONSOLIDAÇÃO DOS RESULTADOS...")
         analise_final = self._processar_analise_final(analise_grok, resultados_ddgs, nome_pessoa, cargo_publico)
         
-        # Fase 4: Salvar e reportar
         print("\n💾 FASE 4: SALVANDO RESULTADOS...")
         self._salvar_analise_completa(analise_final, nome_pessoa)
         
         return analise_final
     
     def _processar_analise_final(self, analise_grok, resultados_ddgs, nome_pessoa, cargo_publico):
-        """Processa e consolida a análise final"""
-        
-        # Se Grok falhou, criar análise básica com DuckDuckGo
-        if "error" in analise_grok:
+        """Processa e consolida a análise final com lógica melhorada"""
+
+        if not analise_grok or "error" in analise_grok:
             print("⚠️ Usando fallback DuckDuckGo (Grok indisponível)")
             return self._criar_analise_ddgs(resultados_ddgs, nome_pessoa, cargo_publico)
         
-        # Enriquecer análise do Grok com dados do DuckDuckGo
-        analise_grok['fontes_consultadas'].append("DuckDuckGo (Busca Consolidada)")
+        if not isinstance(analise_grok, dict):
+            print("⚠️ Resposta do Grok inválida, usando fallback")
+            return self._criar_analise_ddgs(resultados_ddgs, nome_pessoa, cargo_publico)
+        
+        if 'fontes_consultadas' not in analise_grok:
+            analise_grok['fontes_consultadas'] = []
+        
+        if 'tweets_relevantes' not in analise_grok:
+            analise_grok['tweets_relevantes'] = []
+        
+        if 'polemicas' not in analise_grok:
+            analise_grok['polemicas'] = []
+        
+        # Adicionar fonte DuckDuckGo
+        if "DuckDuckGo (Busca Consolidada)" not in analise_grok['fontes_consultadas']:
+            analise_grok['fontes_consultadas'].append("DuckDuckGo (Busca Consolidada)")
         
         # Extrair tweets relevantes dos resultados
         tweets = []
@@ -230,10 +117,55 @@ class AnalisadorUnificado:
                 }
                 tweets.append(json.dumps(tweet_info, ensure_ascii=False))
         
-        if tweets:
+        if tweets and not analise_grok['tweets_relevantes']:
             analise_grok['tweets_relevantes'] = tweets
         
-        analise_grok['data_analise'] = datetime.now().isoformat()
+        # ANÁLISE DE CONTEXTO MELHORADA
+        texto_completo = " ".join([
+            str(resultado.get('title', '')) + " " + str(resultado.get('body', '')) 
+            for resultado in resultados_ddgs
+        ]).lower()
+        
+        # Verificar se há predominantemente conteúdo positivo
+        termos_positivos_contexto = [
+            'positivo', 'favorável', 'elogio', 'reconhecimento', 'competente',
+            'eficiente', 'confiança', 'honesto', 'íntegro', 'trabalho'
+        ]
+        
+        termos_negativos_contexto = [
+            'corrupção', 'fraude', 'crime', 'condenado', 'prisão',
+            'irregularidade', 'denúncia', 'processo', 'investigação'
+        ]
+        
+        count_positivo = sum(1 for termo in termos_positivos_contexto if termo in texto_completo)
+        count_negativo = sum(1 for termo in termos_negativos_contexto if termo in texto_completo)
+        
+        # Se contexto é predominantemente positivo, ajustar risco
+        if count_positivo > count_negativo * 2:  # Muito mais positivo que negativo
+            risco_ajustado = "BAIXO"
+        elif count_positivo > count_negativo:    # Mais positivo que negativo
+            risco_ajustado = "BAIXO"
+        else:
+            risco_ajustado = self._calcular_risco_geral(analise_grok.get('polemicas', []))
+        
+        # Garantir campos essenciais
+        if 'data_analise' not in analise_grok:
+            analise_grok['data_analise'] = datetime.now().isoformat()
+        
+        if 'nome' not in analise_grok:
+            analise_grok['nome'] = nome_pessoa
+        
+        if 'cargo_publico' not in analise_grok:
+            analise_grok['cargo_publico'] = cargo_publico
+        
+        if 'total_polemicas' not in analise_grok:
+            analise_grok['total_polemicas'] = len(analise_grok.get('polemicas', []))
+        
+        if 'risco_reputacao' not in analise_grok:
+            analise_grok['risco_reputacao'] = risco_ajustado
+        
+        if 'resumo_analise' not in analise_grok:
+            analise_grok['resumo_analise'] = "Análise realizada com sucesso"
         
         return analise_grok
     
@@ -295,16 +227,60 @@ class AnalisadorUnificado:
         else:
             return TipoFonteEnum.BLOG
     
+
     def _classificar_gravidade(self, texto):
+        """Classificação de gravidade MAIS PRECISA"""
+        if not texto:
+            return "baixa"
+            
         texto = texto.lower()
-        if any(termo in texto for termo in ['corrupção', 'condenado', 'prisão', 'desvio', 'crime']):
-            return GravidadeEnum.CRITICA
-        elif any(termo in texto for termo in ['investigação', 'processo', 'denúncia', 'improbidade', 'fraude']):
-            return GravidadeEnum.ALTA
-        elif any(termo in texto for termo in ['polêmica', 'controvérsia', 'crítica', 'questionamento']):
-            return GravidadeEnum.MEDIA
+        
+        # Termos CRÍTICOS - crimes graves
+        termos_criticos = [
+            'condenado', 'prisão', 'crime', 'lavagem de dinheiro', 'tráfico',
+            'assassinato', 'homicídio', 'pedofilia', 'estupro', 'racismo'
+        ]
+        
+        # Termos ALTOS - corrupção, fraudes graves
+        termos_altos = [
+            'corrupção', 'desvio', 'propina', 'improbidade', 'fraude',
+            'superfaturamento', 'licitação fraudulenta', 'caixa dois',
+            'sonegação fiscal', 'lavagem de capitais'
+        ]
+        
+        # Termos MÉDIOS - investigações, processos
+        termos_medios = [
+            'investigação', 'processo', 'denúncia', 'inquérito', 'apuração',
+            'irregularidade', 'tribunal de contas', 'tce', 'mpf', 'pf'
+        ]
+        
+        # Termos BAIXOS - polêmicas leves, críticas
+        termos_baixos = [
+            'polêmica', 'controvérsia', 'crítica', 'questionamento',
+            'acórdão', 'escrutínio', 'auditoria', 'recomendação'
+        ]
+        
+        # Termos POSITIVOS - que devem reduzir gravidade
+        termos_positivos = [
+            'absolvido', 'inocente', 'arquivado', 'improcedente',
+            'favorável', 'positivo', 'elogio', 'reconhecimento'
+        ]
+        
+        # Verificar termos positivos primeiro (reduzem gravidade)
+        if any(termo in texto for termo in termos_positivos):
+            return "baixa"
+        
+        # Classificar por gravidade
+        if any(termo in texto for termo in termos_criticos):
+            return "critica"
+        elif any(termo in texto for termo in termos_altos):
+            return "alta"
+        elif any(termo in texto for termo in termos_medios):
+            return "media"
+        elif any(termo in texto for termo in termos_baixos):
+            return "baixa"
         else:
-            return GravidadeEnum.BAIXA
+            return "baixa"  # Padrão conservador: quando não sabe, classifica como baixo
     
     def _extrair_categorias(self, texto):
         categorias = []
@@ -322,18 +298,29 @@ class AnalisadorUnificado:
         return categorias if categorias else ["Outros"]
     
     def _calcular_risco_geral(self, polemicas):
+        """Calcula o risco geral baseado nas polêmicas encontradas"""
         if not polemicas:
-            return GravidadeEnum.BAIXA
+            return "BAIXO"  # Sem polêmicas = risco baixo
         
-        gravidades = [p.get('gravidade', 'baixa') for p in polemicas]
-        if any(g == 'critica' for g in gravidades):
-            return GravidadeEnum.CRITICA
-        elif any(g == 'alta' for g in gravidades):
-            return GravidadeEnum.ALTA
-        elif any(g == 'media' for g in gravidades):
-            return GravidadeEnum.MEDIA
+        # Contar gravidades
+        gravidades = [p.get('gravidade', 'baixa').lower() for p in polemicas]
+        
+        critica_count = gravidades.count('critica')
+        alta_count = gravidades.count('alta') 
+        media_count = gravidades.count('media')
+        baixa_count = gravidades.count('baixa')
+        
+        # Lógica de classificação MELHORADA
+        if critica_count > 0:
+            return "CRÍTICA"
+        elif alta_count >= 2 or (alta_count >= 1 and media_count >= 2):
+            return "ALTA"
+        elif alta_count >= 1 or media_count >= 2:
+            return "MÉDIA"
+        elif media_count >= 1:
+            return "BAIXA"  # Polêmicas leves = risco baixo
         else:
-            return GravidadeEnum.BAIXA
+            return "BAIXO"  # Apenas polêmicas baixas = risco baixo
     
     def _salvar_resultados_brutos(self, resultados_ddgs, nome_pessoa):
         """Salva resultados brutos do DuckDuckGo"""
@@ -364,23 +351,24 @@ class AnalisadorUnificado:
     
     def _gerar_relatorio_console(self, analise):
         """Gera relatório resumido no console"""
-        print(f"\n📊 RELATÓRIO FINAL - {analise['nome']}")
+        print(f"\n📊 RELATÓRIO FINAL - {analise.get('nome', 'N/A')}")
         print("=" * 50)
-        print(f"🔍 Polêmicas encontradas: {analise['total_polemicas']}")
-        print(f"🚨 Risco reputação: {analise['risco_reputacao'].upper()}")
-        print(f"📅 Data análise: {analise['data_analise'][:10]}")
-        print(f"🔧 Fontes: {', '.join(analise['fontes_consultadas'])}")
+        print(f"🔍 Polêmicas encontradas: {analise.get('total_polemicas', 0)}")
+        print(f"🚨 Risco reputação: {str(analise.get('risco_reputacao', 'N/A')).upper()}")
+        print(f"📅 Data análise: {analise.get('data_analise', '')[:10]}")
+        print(f"🔧 Fontes: {', '.join(analise.get('fontes_consultadas', []))}")
         
         if analise.get('tweets_relevantes'):
-            print(f"🐦 Tweets relevantes: {len(analise['tweets_relevantes'])}")
+            print(f"🦅 Tweets relevantes: {len(analise['tweets_relevantes'])}")
         
-        if analise['polemicas']:
+        if analise.get('polemicas'):
             print(f"\n🎯 PRINCIPAIS POLÊMICAS:")
             for i, polemica in enumerate(analise['polemicas'][:3], 1):
-                print(f"\n{i}. {polemica['titulo']}")
-                print(f"   📍 Gravidade: {polemica['gravidade'].upper()}")
-                print(f"   📝 {polemica['descricao'][:100]}...")
-                print(f"   🔗 Fonte: {polemica['tipo_fonte']}")
+                print(f"\n{i}. {polemica.get('titulo', 'N/A')}")
+                print(f"   📊 Gravidade: {str(polemica.get('gravidade', 'N/A')).upper()}")
+                descricao = polemica.get('descricao', 'N/A')
+                print(f"   📝 {descricao[:100]}...")
+                print(f"   🔗 Fonte: {polemica.get('tipo_fonte', 'N/A')}")
 
 def executar_analise(nome_pessoa, cargo=None):
     """Função principal para executar análise"""
@@ -400,6 +388,8 @@ def executar_analise(nome_pessoa, cargo=None):
         
     except Exception as e:
         print(f"❌ Erro na análise: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # EXECUÇÃO PRINCIPAL

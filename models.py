@@ -1,152 +1,125 @@
-# model.py
-"""
-Modelos de banco de dados para o sistema de análise de reputação.
-Usamos herança dinâmica para evitar problemas de inicialização.
-"""
 
-from datetime import datetime
+
+from enum import Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-import json
+from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Optional
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
-# Não criamos db aqui - será injetado pelo app.py
-db = None
+# Criar instância do SQLAlchemy sem inicializar com app ainda
+db = SQLAlchemy()
 
-def init_models(database):
-    """Inicializa os modelos com a instância do banco"""
-    global db, Analise, Polemica, Tweet, Fonte
-    db = database
-    
-    # --- MODELOS COM HERANÇA DINÂMICA --- #
-    class AnaliseBase:
-        def as_dict(self):
-            result = {c.name: getattr(self, c.name) for c in self.__table__.columns}
-            result["data_analise"] = self.data_analise.isoformat() if self.data_analise else None
-            result["polemicas"] = [p.as_dict() for p in self.polemicas]
-            result["tweets"] = [t.as_dict() for t in self.tweets]
-            result["fontes"] = [f.as_dict() for f in self.fontes]
-            return result
+Base = declarative_base()
 
-    class Analise(db.Model, AnaliseBase):
-        __tablename__ = "analises"
+# ========== MODELOS DO BANCO ==========
 
-        id = db.Column(db.Integer, primary_key=True)
-        nome = db.Column(db.String(255), nullable=False)
-        cargo_publico = db.Column(db.String(255))
-        total_polemicas = db.Column(db.Integer, default=0)
-        resumo_analise = db.Column(db.Text)
-        risco_reputacao = db.Column(db.String(100))
-        data_analise = db.Column(db.DateTime, default=datetime.utcnow)
-        fontes_consultadas = db.Column(db.Text)
-        tweets_relevantes = db.Column(db.Text)
-        raw = db.Column(db.Text)
+class GravidadeEnum(str, Enum):
+    BAIXA = "baixa"
+    MEDIA = "media"
+    ALTA = "alta"
+    CRITICA = "critica"
 
-        polemicas = relationship("Polemica", back_populates="analise", cascade="all, delete-orphan")
-        tweets = relationship("Tweet", back_populates="analise", cascade="all, delete-orphan")
-        fontes = relationship("Fonte", back_populates="analise", cascade="all, delete-orphan")
+class TipoFonteEnum(str, Enum):
+    TWITTER = "twitter"
+    NOTICIA = "noticia"
+    FORUM = "forum"
+    BLOG = "blog"
+    SITE_OFICIAL = "site_oficial"
 
-    class Polemica(db.Model):
-        __tablename__ = "polemicas"
+# models.py
 
-        id = db.Column(db.Integer, primary_key=True)
-        analise_id = db.Column(db.Integer, db.ForeignKey("analises.id"))
-        titulo = db.Column(db.String(255))
-        descricao = db.Column(db.Text)
-        impacto = db.Column(db.String(100))
-        fonte = db.Column(db.String(255))
-        data_publicacao = db.Column(db.String(100))
+class AnalisePessoaDB(db.Model):
+    __tablename__ = 'analise_pessoa'
 
-        analise = relationship("Analise", back_populates="polemicas")
+    id = db.Column(db.Integer, primary_key=True, index=True)
+    nome = db.Column(db.String, nullable=False)
+    cargo = db.Column(db.String, nullable=True)
+    data_analise = db.Column(db.DateTime, default=datetime.utcnow)
+    fontes_consultadas = db.Column(db.Text, nullable=True)
+    resumo_analise = db.Column(db.Text, nullable=True)
+    risco_reputacao = db.Column(db.String, nullable=True)
+    recomendacoes = db.Column(db.Text, nullable=True)
+    tweets_relevantes = db.Column(db.Text, nullable=True)
+    total_polemicas = db.Column(db.Integer, default=0)
 
-        def as_dict(self):
-            return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+    # Relacionamentos
+    polemicas = db.relationship("PolemicaDB", back_populates="analise_pessoa", cascade="all, delete-orphan")
+    empresas_associadas = db.relationship("EmpresaAssociadaDB", back_populates="analise_pessoa", cascade="all, delete-orphan")
 
-    class Tweet(db.Model):
-        __tablename__ = "tweets"
+class PolemicaDB(db.Model):
+    __tablename__ = 'polemica'
 
-        id = db.Column(db.Integer, primary_key=True)
-        analise_id = db.Column(db.Integer, db.ForeignKey("analises.id"))
-        usuario = db.Column(db.String(255))
-        conteudo = db.Column(db.Text)
-        data = db.Column(db.String(100))
-        url = db.Column(db.String(500))
+    id = db.Column(db.Integer, primary_key=True, index=True)
+    analise_pessoa_id = db.Column(db.Integer, db.ForeignKey('analise_pessoa.id'))
+    titulo = db.Column(db.String, nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+    gravidade = db.Column(db.String, nullable=True)
+    categoria = db.Column(db.String, nullable=True)
+    fonte_url = db.Column(db.String, nullable=True)
 
-        analise = relationship("Analise", back_populates="tweets")
+    analise_pessoa = db.relationship("AnalisePessoaDB", back_populates="polemicas")
 
-        def as_dict(self):
-            return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+class EmpresaAssociadaDB(db.Model):
+    __tablename__ = 'empresa_associada'
 
-    class Fonte(db.Model):
-        __tablename__ = "fontes"
+    id = db.Column(db.Integer, primary_key=True, index=True)
+    analise_pessoa_id = db.Column(db.Integer, db.ForeignKey('analise_pessoa.id'))
+    nome_empresa = db.Column(db.String, nullable=False)
+    cnpj = db.Column(db.String, nullable=True)
+    relacao = db.Column(db.String, nullable=True)
+    fonte_url = db.Column(db.String, nullable=True)
 
-        id = db.Column(db.Integer, primary_key=True)
-        analise_id = db.Column(db.Integer, db.ForeignKey("analises.id"))
-        titulo = db.Column(db.String(255))
-        url = db.Column(db.String(500))
-        tipo = db.Column(db.String(100))
+    analise_pessoa = db.relationship("AnalisePessoaDB", back_populates="empresas_associadas")
 
-        analise = relationship("Analise", back_populates="fontes")
+class Polemica(BaseModel):
+    titulo: str
+    descricao: Optional[str] = None
+    gravidade: Optional[str] = None
+    categoria: Optional[str] = None
+    fonte_url: Optional[str] = None
 
-        def as_dict(self):
-            return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+class EmpresaAssociada(BaseModel):
+    nome_empresa: str
+    cnpj: Optional[str] = None
+    relacao: Optional[str] = None
+    fonte_url: Optional[str] = None
 
-    # Tornar as classes disponíveis globalmente
-    globals()['Analise'] = Analise
-    globals()['Polemica'] = Polemica
-    globals()['Tweet'] = Tweet
-    globals()['Fonte'] = Fonte
-    
-    print("✅ Modelos inicializados com sucesso")
-    return db
+class AnalisePessoa(BaseModel):
+    resumo_analise: Optional[str] = None
+    polemicas: List[Polemica] = []
+    empresas_associadas: List[EmpresaAssociada] = []
+    risco_reputacao: Optional[str] = None
+    recomendacoes: Optional[str] = None
+    tweets_relevantes: List[str] = []
 
-def save_analysis(analise_dict: dict):
-    """Salva resultado de análise no banco."""
-    if db is None:
-        raise RuntimeError("Banco não inicializado. Chame init_models primeiro.")
-    
-    nome = analise_dict.get("nome")
-    cargo_publico = analise_dict.get("cargo_publico")
-    total_polemicas = analise_dict.get("total_polemicas", 0)
-    resumo = analise_dict.get("resumo_analise", "")
-    risco = analise_dict.get("risco_reputacao", "")
-    fontes = analise_dict.get("fontes_consultadas", [])
-    tweets = analise_dict.get("tweets_relevantes", [])
-    data_str = analise_dict.get("data_analise")
-    data_analise = datetime.fromisoformat(data_str) if data_str else datetime.utcnow()
+class AnalisePessoaCreate(BaseModel):
+    nome: str
+    cargo: Optional[str] = None
+    data_analise: datetime
+    fontes_consultadas: Optional[str] = None
+    resumo_analise: Optional[str] = None
+    risco_reputacao: Optional[str] = None
+    recomendacoes: Optional[str] = None
+    tweets_relevantes: Optional[str] = None
+    total_polemicas: int = 0
 
-    analise = Analise(
-        nome=nome,
-        cargo_publico=cargo_publico,
-        total_polemicas=total_polemicas,
-        resumo_analise=resumo,
-        risco_reputacao=risco,
-        data_analise=data_analise,
-        fontes_consultadas=json.dumps(fontes, ensure_ascii=False),
-        tweets_relevantes=json.dumps(tweets, ensure_ascii=False),
-        raw=json.dumps(analise_dict, ensure_ascii=False)
-    )
+class PolemicaCreate(BaseModel):
+    titulo: str
+    descricao: Optional[str] = None
+    gravidade: Optional[str] = None
+    categoria: Optional[str] = None
+    fonte_url: Optional[str] = None
 
-    for p in analise_dict.get("polemicas", []):
-        analise.polemicas.append(Polemica(
-            titulo=p.get("titulo"),
-            descricao=p.get("descricao"),
-            impacto=p.get("impacto"),
-            fonte=p.get("fonte"),
-            data_publicacao=p.get("data_publicacao")
-        ))
+class EmpresaAssociadaCreate(BaseModel):
+    nome_empresa: str
+    cnpj: Optional[str] = None
+    relacao: Optional[str] = None
+    fonte_url: Optional[str] = None
 
-    db.session.add(analise)
-    db.session.commit()
-    return analise.id
-
-def get_analysis(id_or_name):
-    """Recupera análise completa por ID ou nome."""
-    if db is None:
-        raise RuntimeError("Banco não inicializado. Chame init_models primeiro.")
-    
-    analise = None
-    if str(id_or_name).isdigit():
-        analise = Analise.query.get(int(id_or_name))
-    else:
-        analise = Analise.query.filter_by(nome=id_or_name).order_by(Analise.id.desc()).first()
-
-    return analise.as_dict() if analise else None
+def init_models(db_instance):    
+    Base.metadata.bind = db_instance.engine
+    Base.metadata.create_all(db_instance.engine)
